@@ -1,0 +1,3 @@
+call activate mimipiano
+python emotion_camera_standalone.py
+pause

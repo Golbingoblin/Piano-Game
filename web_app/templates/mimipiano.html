@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>😊 MimiPiano - Emotion MIDI</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <a href="/" class="back-btn">← 메뉴로</a>
+
+    <div class="container">
+        <header>
+            <h1>😊 MimiPiano</h1>
+            <p class="subtitle">표정으로 음악의 분위기를 바꾸세요</p>
+        </header>
+
+        <div class="video-container">
+            <canvas id="canvas" width="920" height="520"></canvas>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label>🎹 MIDI 출력 장치</label>
+                <select id="midiOutputSelect">
+                    <option value="">로딩 중...</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <button id="startBtn" onclick="startMimiPiano()">▶ 시작</button>
+                <button id="stopBtn" onclick="stopMimiPiano()" disabled>⏹ 정지</button>
+            </div>
+
+            <div class="control-group">
+                <label>
+                    <input type="checkbox" id="useCameraScore" checked> 카메라 표정 사용
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label>행복 점수 (수동): <span id="happyValue">100</span></label>
+                <input type="range" id="happySlider" min="0" max="100" step="1" value="100">
+            </div>
+
+            <div class="control-group">
+                <label>특별 점수 (수동): <span id="specialValue">0</span></label>
+                <input type="range" id="specialSlider" min="0" max="100" step="1" value="0">
+            </div>
+
+            <div class="control-group">
+                <label>Key 폴더 선택</label>
+                <select id="keySelect">
+                    <option value="">선택하세요</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>MIDI 파일 선택</label>
+                <select id="midiSelect">
+                    <option value="">선택하세요</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <button onclick="playMIDI()">🎵 재생</button>
+                <button onclick="stopMIDI()">⏹ 정지</button>
+            </div>
+        </div>
+
+        <div class="status" id="status">
+            초기화 중...
+        </div>
+
+        <div class="status" style="margin-top: 10px; font-size: 0.9em;">
+            <div id="emotionDisplay">감정: --</div>
+            <div id="scoresDisplay">Happy: -- / Special: --</div>
+            <div id="faceDisplay">얼굴 감지: ❌</div>
+        </div>
+
+        <div class="controls" style="margin-top: 20px; font-size: 0.9em; opacity: 0.8;">
+            <p>⚠️ <strong>중요:</strong> MimiPiano를 사용하려면 먼저 CNN 모델을 TensorFlow.js 형식으로 변환해야 합니다.</p>
+            <p><strong>변환 방법:</strong></p>
+            <ol style="text-align: left; max-width: 600px; margin: 10px auto;">
+                <li><code>pip install tensorflowjs</code></li>
+                <li><code>tensorflowjs_converter --input_format=keras mimipiano/checkPoint_model.h5 web_app/static/data/tfjs_model</code></li>
+                <li>변환된 모델이 <code>web_app/static/data/tfjs_model/</code>에 생성됨</li>
+            </ol>
+            <p>현재는 <strong>MediaPipe Face Detection</strong>만 사용하여 얼굴 감지를 수행합니다.</p>
+        </div>
+    </div>
+
+    <!-- TensorFlow.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
+
+    <!-- MediaPipe Face Detection -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js"></script>
+
+    <script src="/static/js/common.js"></script>
+    <script src="/static/js/mimipiano.js"></script>
+</body>
+</html>

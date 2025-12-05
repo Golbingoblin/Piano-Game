@@ -1,0 +1,11 @@
+name: piano-games
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.9
+  - flask>=2.2,<2.3
+  - pip
+  - pip:
+      - tensorflowjs==4.10.0
+

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>🎹 Piano Games</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎹 Piano Games</h1>
+            <p class="subtitle">자동피아노와 함께하는 인터랙티브 음악 게임</p>
+        </header>
+
+        <div class="game-grid">
+            <!-- Conductor -->
+            <a href="/conductor" class="game-card">
+                <div class="game-icon">🎵</div>
+                <h2 class="game-title">Conductor</h2>
+                <p class="game-description">
+                    카메라 앞에서 움직이면 MIDI 재생 속도가 변합니다.
+                    움직임의 강도로 템포를 자유롭게 조절하세요.
+                </p>
+            </a>
+
+            <!-- AirPiano -->
+            <a href="/airpiano" class="game-card">
+                <div class="game-icon">✋</div>
+                <h2 class="game-title">AirPiano</h2>
+                <p class="game-description">
+                    손가락으로 공중 피아노를 연주하세요.
+                    손 제스처를 인식해서 아름다운 코드 진행을 만들어냅니다.
+                </p>
+            </a>
+
+            <!-- Singing Piano -->
+            <a href="/singing" class="game-card">
+                <div class="game-icon">🎤</div>
+                <h2 class="game-title">Singing Piano</h2>
+                <p class="game-description">
+                    노래하거나 허밍하면 목소리가 MIDI로 변환됩니다.
+                    블루스 스케일로 자동 보정되어 누구나 연주자가 됩니다.
+                </p>
+            </a>
+
+            <!-- MimiPiano -->
+            <a href="/mimipiano" class="game-card">
+                <div class="game-icon">😊</div>
+                <h2 class="game-title">MimiPiano</h2>
+                <p class="game-description">
+                    얼굴 표정으로 음악의 분위기를 바꾸세요.
+                    행복한 표정일수록 밝은 음악, 슬픈 표정일수록 애절한 음악.
+                </p>
+            </a>
+        </div>
+
+        <div class="controls" style="margin-top: 40px;">
+            <div class="control-group">
+                <label for="midiOutputSelect" style="font-size: 1.2em; font-weight: bold;">
+                    🎹 MIDI 출력 장치 선택
+                </label>
+                <select id="midiOutputSelect" style="width: 100%; max-width: 500px;">
+                    <option value="">로딩 중...</option>
+                </select>
+            </div>
+
+            <div class="control-group" style="margin-top: 15px;">
+                <a href="/midi-test" class="btn" style="display: inline-block; text-decoration: none; padding: 12px 24px;">
+                    🔧 MIDI 장치 테스트
+                </a>
+            </div>
+        </div>
+
+        <div class="status" id="status" style="margin-top: 30px;">
+            게임을 선택하세요
+        </div>
+
+        <div class="controls" style="margin-top: 20px;">
+            <p style="font-size: 0.9em; opacity: 0.8;">
+                ⚠️ Chrome 또는 Edge 브라우저 사용 권장 (Web MIDI API 지원)<br>
+                📱 터치 모니터 환경에 최적화되었습니다<br>
+                💾 선택한 MIDI 장치는 자동으로 저장됩니다
+            </p>
+        </div>
+    </div>
+
+    <script src="/static/js/common.js"></script>
+    <script>
+        // 페이지 로드 시 MIDI 연결 상태 체크
+        window.addEventListener('load', async () => {
+            const result = await initMIDI();
+
+            if (result.success) {
+                // MIDI 출력 선택 UI 업데이트
+                const select = document.getElementById('midiOutputSelect');
+                populateMidiSelect(select, result.outputs, result.selected);
+
+                showSuccess(`MIDI 연결됨: ${result.selected.name}`);
+            } else {
+                showError(result.error);
+                document.getElementById('midiOutputSelect').innerHTML = '<option value="">MIDI 장치 없음</option>';
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Build artifacts
+build/
+dist/
+*.exe
+*.zip
+*.spec
+
+# Model files
+*.h5
+*.joblib
+
+# VS Code & Claude
+.vscode/
+.claude/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Temporary / backup
+*.bak

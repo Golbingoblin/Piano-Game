@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>✋ AirPiano - Hand Gesture MIDI</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <a href="/" class="back-btn">← 메뉴로</a>
+
+    <div class="container">
+        <header>
+            <h1>✋ AirPiano</h1>
+            <p class="subtitle">손가락으로 공중 피아노를 연주하세요</p>
+        </header>
+
+        <div class="video-container">
+            <canvas id="canvas" width="1280" height="720"></canvas>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label>🎹 MIDI 출력 장치</label>
+                <select id="midiOutputSelect">
+                    <option value="">로딩 중...</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <button id="startBtn" onclick="startAirPiano()">▶ 시작</button>
+                <button id="pauseBtn" onclick="togglePause()" disabled>⏸ 일시 중지</button>
+                <button id="changeBtn" onclick="changeProgression()" disabled>🔄 분위기 전환</button>
+            </div>
+
+            <div class="control-group">
+                <label>BPM: <span id="bpmValue">120</span></label>
+                <input type="range" id="bpm" min="60" max="180" step="1" value="120">
+            </div>
+        </div>
+
+        <div class="status" id="status">
+            MIDI와 카메라를 초기화 중...
+        </div>
+    </div>
+
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+    <script src="/static/js/common.js"></script>
+    <script src="/static/js/airpiano.js"></script>
+</body>
+</html>

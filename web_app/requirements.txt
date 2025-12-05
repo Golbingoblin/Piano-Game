@@ -1,0 +1,9 @@
+# Flask 웹 서버
+Flask==2.3.0
+
+# MimiPiano 모델 변환용 (선택사항)
+# CNN 모델을 TensorFlow.js 형식으로 변환할 때만 필요
+tensorflowjs==4.10.0
+
+# 추가 의존성
+Werkzeug==2.3.0

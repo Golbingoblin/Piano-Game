@@ -1,0 +1,1 @@
+pyinstaller --noconfirm --onefile --windowed ^ --add-data "checkPoint_model.h5;." ^ --add-data "haarcascade_frontalface_default.xml;." ^ --add-data "expression.csv;." ^ --add-data "MusicRoot;MusicRoot" ^ mimipiano_main.py

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎹 MIDI 장치 테스트</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .device-list {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        .device-item {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .device-item h3 {
+            margin: 0 0 10px 0;
+            color: #4CAF50;
+        }
+        .device-info {
+            font-family: monospace;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+        .test-btn {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <a href="/" class="back-btn">← 메뉴로</a>
+
+    <div class="container">
+        <header>
+            <h1>🎹 MIDI 장치 테스트</h1>
+            <p class="subtitle">연결된 모든 MIDI 장치 확인 및 테스트</p>
+        </header>
+
+        <div class="controls">
+            <button onclick="refreshDevices()">🔄 장치 새로고침</button>
+            <button onclick="testAllDevices()">🎵 모든 장치 테스트 (C4 재생)</button>
+            <button onclick="clearSavedDevice()" style="background: rgba(255, 100, 100, 0.3);">
+                🗑️ 저장된 MIDI 설정 초기화
+            </button>
+        </div>
+
+        <div class="status" id="savedDeviceStatus" style="margin-top: 10px; font-size: 0.9em;">
+            💾 저장된 장치: <span id="savedDeviceInfo">확인 중...</span>
+        </div>
+
+        <div class="status" id="status">초기화 중...</div>
+
+        <div class="device-list">
+            <h2>📤 MIDI 출력 장치</h2>
+            <div id="outputList">로딩 중...</div>
+        </div>
+
+        <div class="device-list">
+            <h2>📥 MIDI 입력 장치</h2>
+            <div id="inputList">로딩 중...</div>
+        </div>
+
+        <div class="controls" style="margin-top: 30px;">
+            <h3>💡 문제 해결 팁</h3>
+            <ul style="text-align: left; max-width: 600px; margin: 10px auto; line-height: 1.8;">
+                <li><strong>Microsoft GS Wavetable Synth가 안 보이는 경우:</strong>
+                    <ul>
+                        <li>Windows 설정 → 시스템 → 사운드 → 고급 사운드 옵션에서 확인</li>
+                        <li>장치 관리자에서 "소프트웨어 장치" 확인</li>
+                        <li>브라우저를 관리자 권한으로 실행 시도</li>
+                    </ul>
+                </li>
+                <li><strong>State가 'disconnected'인 경우:</strong>
+                    <ul>
+                        <li>장치가 물리적으로 연결되어 있는지 확인</li>
+                        <li>다른 프로그램이 해당 장치를 사용 중인지 확인</li>
+                    </ul>
+                </li>
+                <li><strong>장치가 전혀 안 보이는 경우:</strong>
+                    <ul>
+                        <li>Chrome/Edge 브라우저 사용 확인</li>
+                        <li>브라우저 플래그 확인: <code>chrome://flags/#enable-experimental-web-platform-features</code></li>
+                        <li>가상 MIDI 포트 설치 (loopMIDI)</li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="/static/js/common.js"></script>
+    <script>
+        let testNotes = new Set();
+
+        // 저장된 장치 정보 표시
+        function updateSavedDeviceInfo() {
+            const savedId = localStorage.getItem('preferredMidiOutput');
+            const infoEl = document.getElementById('savedDeviceInfo');
+
+            if (!savedId) {
+                infoEl.textContent = '없음 (자동 선택)';
+                infoEl.style.color = '#999';
+            } else {
+                infoEl.textContent = `ID: ${savedId}`;
+                infoEl.style.color = '#4CAF50';
+            }
+        }
+
+        // 저장된 설정 초기화
+        function clearSavedDevice() {
+            const savedId = localStorage.getItem('preferredMidiOutput');
+
+            if (!savedId) {
+                showStatus('초기화할 설정이 없습니다.');
+                return;
+            }
+
+            if (confirm('저장된 MIDI 장치 설정을 초기화하시겠습니까?\n다음 접속 시 자동으로 장치를 선택합니다.')) {
+                localStorage.removeItem('preferredMidiOutput');
+                updateSavedDeviceInfo();
+                showSuccess('저장된 설정이 초기화되었습니다. 페이지를 새로고침하세요.');
+                console.log('🗑️ localStorage.preferredMidiOutput 삭제됨');
+            }
+        }
+
+        async function refreshDevices() {
+            showStatus('장치 검색 중...');
+
+            try {
+                // MIDI Access 요청
+                const access = await navigator.requestMIDIAccess({ sysex: false });
+
+                // 출력 장치
+                const outputs = Array.from(access.outputs.values());
+                const outputList = document.getElementById('outputList');
+
+                if (outputs.length === 0) {
+                    outputList.innerHTML = '<p style="opacity: 0.6;">출력 장치가 없습니다.</p>';
+                } else {
+                    outputList.innerHTML = outputs.map((output, idx) => `
+                        <div class="device-item">
+                            <h3>🎵 ${output.name}</h3>
+                            <div class="device-info">
+                                ID: ${output.id}<br>
+                                Manufacturer: ${output.manufacturer || 'N/A'}<br>
+                                State: <span style="color: ${output.state === 'connected' ? '#4CAF50' : '#F44336'}">${output.state}</span><br>
+                                Connection: ${output.connection}<br>
+                                Type: ${output.type || 'output'}
+                            </div>
+                            <button class="test-btn" onclick="testDevice('${output.id}')">
+                                🎹 테스트 (C4 재생)
+                            </button>
+                        </div>
+                    `).join('');
+                }
+
+                // 입력 장치
+                const inputs = Array.from(access.inputs.values());
+                const inputList = document.getElementById('inputList');
+
+                if (inputs.length === 0) {
+                    inputList.innerHTML = '<p style="opacity: 0.6;">입력 장치가 없습니다.</p>';
+                } else {
+                    inputList.innerHTML = inputs.map((input, idx) => `
+                        <div class="device-item">
+                            <h3>🎹 ${input.name}</h3>
+                            <div class="device-info">
+                                ID: ${input.id}<br>
+                                Manufacturer: ${input.manufacturer || 'N/A'}<br>
+                                State: <span style="color: ${input.state === 'connected' ? '#4CAF50' : '#F44336'}">${input.state}</span><br>
+                                Connection: ${input.connection}<br>
+                                Type: ${input.type || 'input'}
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+                // 콘솔에도 출력
+                console.log('📤 MIDI 출력 장치:', outputs);
+                console.log('📥 MIDI 입력 장치:', inputs);
+
+                showSuccess(`총 ${outputs.length}개의 출력 장치, ${inputs.length}개의 입력 장치 발견`);
+
+            } catch (error) {
+                showError('MIDI 장치 검색 실패: ' + error.message);
+                console.error(error);
+            }
+        }
+
+        async function testDevice(deviceId) {
+            try {
+                const access = await navigator.requestMIDIAccess({ sysex: false });
+                const output = access.outputs.get(deviceId);
+
+                if (!output) {
+                    showError('장치를 찾을 수 없습니다.');
+                    return;
+                }
+
+                // C4 (MIDI note 60) 재생
+                const note = 60;
+                const velocity = 100;
+
+                // Note On
+                output.send([0x90, note, velocity]); // Channel 1
+                testNotes.add(note);
+
+                showSuccess(`${output.name}에서 C4 재생 중...`);
+
+                // 1초 후 Note Off
+                setTimeout(() => {
+                    output.send([0x80, note, 0]);
+                    testNotes.delete(note);
+                    showStatus('테스트 완료');
+                }, 1000);
+
+            } catch (error) {
+                showError('테스트 실패: ' + error.message);
+                console.error(error);
+            }
+        }
+
+        async function testAllDevices() {
+            const access = await navigator.requestMIDIAccess({ sysex: false });
+            const outputs = Array.from(access.outputs.values());
+
+            showStatus(`${outputs.length}개 장치에서 순차적으로 테스트 중...`);
+
+            for (let i = 0; i < outputs.length; i++) {
+                const output = outputs[i];
+                console.log(`Testing ${i+1}/${outputs.length}: ${output.name}`);
+
+                // C4 재생
+                output.send([0x90, 60, 100]);
+
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                // Note Off
+                output.send([0x80, 60, 0]);
+
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+
+            showSuccess('모든 장치 테스트 완료!');
+        }
+
+        // 페이지 로드 시 자동 검색
+        window.addEventListener('load', () => {
+            updateSavedDeviceInfo();
+            refreshDevices();
+        });
+
+        // 페이지 언로드 시 모든 노트 끄기
+        window.addEventListener('beforeunload', () => {
+            if (testNotes.size > 0) {
+                navigator.requestMIDIAccess({ sysex: false }).then(access => {
+                    access.outputs.forEach(output => {
+                        testNotes.forEach(note => {
+                            output.send([0x80, note, 0]);
+                        });
+                    });
+                });
+            }
+        });
+    </script>
+</body>
+</html>
