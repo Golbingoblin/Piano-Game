@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Classical Music Library</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Georgia', 'Times New Roman', serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #e8e8e8;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 60px;
+            border-bottom: 2px solid #d4af37;
+            padding-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 3.5em;
+            color: #d4af37;
+            font-weight: 400;
+            letter-spacing: 3px;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .subtitle {
+            font-size: 1.2em;
+            color: #b8b8b8;
+            font-style: italic;
+            letter-spacing: 2px;
+        }
+
+        .back-button {
+            position: fixed;
+            top: 30px;
+            left: 30px;
+            background: rgba(212, 175, 55, 0.2);
+            border: 2px solid #d4af37;
+            color: #d4af37;
+            padding: 12px 24px;
+            font-size: 1em;
+            cursor: pointer;
+            border-radius: 5px;
+            font-family: 'Georgia', serif;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .back-button:hover {
+            background: #d4af37;
+            color: #1a1a2e;
+            transform: translateX(-5px);
+        }
+
+        .composers-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 30px;
+            padding: 20px 0;
+        }
+
+        .composer-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(212, 175, 55, 0.3);
+            border-radius: 10px;
+            padding: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .composer-card:hover {
+            background: rgba(212, 175, 55, 0.15);
+            border-color: #d4af37;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(212, 175, 55, 0.3);
+        }
+
+        .composer-image {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            margin: 0 auto 20px;
+            overflow: hidden;
+            border: 3px solid #d4af37;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .composer-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .composer-image.placeholder {
+            background: linear-gradient(135deg, #2a2a3e 0%, #3a3a5e 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3em;
+            color: #d4af37;
+        }
+
+        .composer-name {
+            font-size: 1.4em;
+            color: #d4af37;
+            margin-bottom: 10px;
+            font-weight: 400;
+        }
+
+        .composer-count {
+            font-size: 0.95em;
+            color: #b8b8b8;
+            font-style: italic;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px;
+            font-size: 1.5em;
+            color: #d4af37;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(212, 175, 55, 0.3);
+            border-top-color: #d4af37;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error {
+            text-align: center;
+            padding: 60px;
+            font-size: 1.2em;
+            color: #ff6b6b;
+        }
+    </style>
+</head>
+<body>
+    <a href="/" class="back-button">← Back to Main</a>
+
+    <div class="container">
+        <header>
+            <h1>Classical Music Library</h1>
+            <p class="subtitle">MAESTRO Dataset Collection</p>
+        </header>
+
+        <div id="composers-container">
+            <div class="loading">
+                <div class="loading-spinner"></div>
+                <p>Loading composers...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Load composers and composer info
+        async function loadComposers() {
+            try {
+                const [composersRes, infoRes] = await Promise.all([
+                    fetch('/api/composers'),
+                    fetch('/api/composers').then(r => r.json()).then(() =>
+                        fetch('/static/data/composer_info.json').catch(() => ({}))
+                    )
+                ]);
+
+                const composers = await composersRes.json();
+                let composerInfo = {};
+
+                try {
+                    composerInfo = await infoRes.json();
+                } catch (e) {
+                    console.log('Composer info not yet available');
+                }
+
+                displayComposers(composers, composerInfo);
+            } catch (error) {
+                console.error('Error loading composers:', error);
+                document.getElementById('composers-container').innerHTML = `
+                    <div class="error">
+                        <p>Error loading composers. Please try again.</p>
+                    </div>
+                `;
+            }
+        }
+
+        function displayComposers(composers, composerInfo) {
+            const container = document.getElementById('composers-container');
+            const composersArray = Object.entries(composers).sort((a, b) =>
+                a[0].localeCompare(b[0])
+            );
+
+            const html = `
+                <div class="composers-grid">
+                    ${composersArray.map(([name, data]) => {
+                        const info = composerInfo[name] || {};
+                        const imageUrl = info.image_url || '';
+                        const initial = name.split(' ').map(n => n[0]).join('').substring(0, 2);
+
+                        return `
+                            <div class="composer-card" onclick="goToComposer('${encodeURIComponent(name)}')">
+                                <div class="composer-image ${imageUrl ? '' : 'placeholder'}">
+                                    ${imageUrl ? `<img src="${imageUrl}" alt="${name}">` : initial}
+                                </div>
+                                <div class="composer-name">${name}</div>
+                                <div class="composer-count">${data.piece_count} pieces</div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        function goToComposer(composerName) {
+            window.location.href = `/composer/${composerName}`;
+        }
+
+        // Load on page load
+        loadComposers();
+    </script>
+</body>
+</html>

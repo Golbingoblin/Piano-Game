@@ -4,6 +4,13 @@
  */
 
 // ============ 설정 ============
+
+// 키 매핑 (음악 이론)
+const KEY_STR_TO_PC = {"C":0,"Cs":1,"D":2,"Ds":3,"E":4,"F":5,"Fs":6,"G":7,"Gs":8,"A":9,"As":10,"B":11};
+const MAJOR_SCALE_PCS = {1:0, 2:2, 3:4, 4:5, 5:7, 6:9, 7:11};
+const MODE_TARGET_DEGREE = {"Lydian":4, "Mixolydian":7, "Dorian":3, "Aeolian":6, "Phrygian":2, "Locrian":5};
+const MODE_SEMITONE_DELTA = {"Lydian":+1, "Mixolydian":-1, "Dorian":-1, "Aeolian":-1, "Phrygian":-1, "Locrian":-1};
+
 let expressionMap = null;
 let happyScore = 100;
 let specialScore = 0;
@@ -29,6 +36,8 @@ let selectedMIDI = '';
 // MIDI 재생
 let isPlaying = false;
 let playbackNoteMap = {};
+let playbackTimeouts = [];
+let currentMidiData = null;
 
 // ============ 초기화 ============
 
@@ -105,15 +114,24 @@ async function loadExpressionMap() {
         if (idx === 0) return; // 헤더 스킵
 
         const name = row[0];
-        const flat0 = parseFloat(row[1]) || null;
-        const flat100 = parseFloat(row[2]) || null;
-        const sharp0 = parseFloat(row[3]) || null;
-        const sharp100 = parseFloat(row[4]) || null;
+
+        // 빈 값은 null, 숫자는 그대로 (0도 유효한 값!)
+        const parseOrNull = (val) => {
+            if (val === '' || val === undefined || val === null) return null;
+            const num = parseFloat(val);
+            return isNaN(num) ? null : num;
+        };
+
+        const flat0 = parseOrNull(row[1]);
+        const flat100 = parseOrNull(row[2]);
+        const sharp0 = parseOrNull(row[3]);
+        const sharp100 = parseOrNull(row[4]);
 
         expressionMap[name] = { flat0, flat100, sharp0, sharp100 };
     });
 
     console.log('✅ Expression map loaded:', Object.keys(expressionMap));
+    console.log('Expression map details:', expressionMap);
 }
 
 // ============ CNN 모델 로드 ============
@@ -132,21 +150,31 @@ async function loadEmotionModel() {
 // ============ MIDI 파일 목록 로드 ============
 
 async function loadMIDIFileList() {
-    // 서버에서 MIDI 파일 목록 가져오기 (별도 API 필요)
-    // 여기서는 하드코딩된 예시
-    midiFiles = {
-        'C': ['song1.mid', 'song2.mid'],
-        'D': ['song3.mid'],
-        'E': ['song4.mid']
-    };
+    try {
+        const response = await fetch('/api/midi-files');
+        const data = await response.json();
 
-    const keySelect = document.getElementById('keySelect');
-    Object.keys(midiFiles).forEach(key => {
-        const option = document.createElement('option');
-        option.value = key;
-        option.textContent = key;
-        keySelect.appendChild(option);
-    });
+        if (data.error) {
+            showError('MIDI 파일 목록 로드 실패: ' + data.error);
+            return;
+        }
+
+        midiFiles = data;
+
+        const keySelect = document.getElementById('keySelect');
+        keySelect.innerHTML = '<option value="">선택하세요</option>';
+
+        Object.keys(midiFiles).sort().forEach(key => {
+            const option = document.createElement('option');
+            option.value = key;
+            option.textContent = key + ` (${midiFiles[key].length}개)`;
+            keySelect.appendChild(option);
+        });
+
+        console.log('MIDI files loaded:', Object.keys(midiFiles).length, 'keys');
+    } catch (error) {
+        showError('MIDI 파일 목록 로드 실패: ' + error.message);
+    }
 }
 
 function updateMIDISelect() {
@@ -183,9 +211,10 @@ async function startMimiPiano() {
     faceDetection.onResults(onFaceResults);
 
     // 카메라 시작
-    camera = new Camera(document.createElement('video'), {
+    const videoElement = document.createElement('video');
+    camera = new Camera(videoElement, {
         onFrame: async () => {
-            await faceDetection.send({ image: camera.g });
+            await faceDetection.send({ image: videoElement });
         },
         width: 920,
         height: 520
@@ -338,11 +367,53 @@ function updateScoresDisplay() {
     document.getElementById('faceDisplay').textContent =
         `얼굴 감지: ${faceDetected ? '✅' : '❌'}`;
 
-    // 확률 계산
+    // 확률 계산 및 표시
     if (expressionMap) {
         const probs = calculateProbabilities(happyScore, specialScore);
-        console.log('Expression probs:', probs);
+
+        // 확률이 0보다 큰 모드만 필터링
+        const activeProbs = Object.entries(probs)
+            .filter(([mode, prob]) => prob > 0)
+            .map(([mode, prob]) => `${mode}:${(prob * 100).toFixed(0)}%`)
+            .join(', ');
+
+        if (activeProbs) {
+            console.log(`[PROBS] ${activeProbs}`);
+        }
     }
+}
+
+// ============ 음악 이론 함수 ============
+
+function pc(note) {
+    return note % 12;
+}
+
+function nearestMajorDegreePitchclass(rootPC, pitchPC) {
+    const rel = (pitchPC - rootPC + 12) % 12;
+    for (const [deg, off] of Object.entries(MAJOR_SCALE_PCS)) {
+        if (rel === off) {
+            return parseInt(deg);
+        }
+    }
+    return null;
+}
+
+function maybeAlter(note, rootPC, probs) {
+    const pitchPC = pc(note);
+    const deg = nearestMajorDegreePitchclass(rootPC, pitchPC);
+
+    if (!deg) return note;
+
+    for (const [mode, targetDeg] of Object.entries(MODE_TARGET_DEGREE)) {
+        if (deg === targetDeg && Math.random() < (probs[mode] || 0)) {
+            const altered = note + MODE_SEMITONE_DELTA[mode];
+            console.log(`[ALTER] Note ${note} -> ${altered} (${mode}, deg=${deg}, prob=${probs[mode]})`);
+            return Math.max(0, Math.min(127, altered));
+        }
+    }
+
+    return note;
 }
 
 // ============ 확률 계산 ============
@@ -383,20 +454,114 @@ function calculateProbabilities(happiness, special) {
     return probs;
 }
 
-// ============ MIDI 재생 (간단한 버전) ============
+// ============ MIDI 재생 ============
 
-function playMIDI() {
+async function playMIDI() {
     if (!selectedKey || !selectedMIDI) {
         showError('MIDI 파일을 선택하세요');
         return;
     }
 
-    showSuccess(`재생 중: ${selectedKey}/${selectedMIDI}`);
-    // 실제 MIDI 파일 재생 로직은 MIDI.js 또는 다른 라이브러리 필요
-    // 여기서는 간단히 알림만 표시
+    if (isPlaying) {
+        stopMIDI();
+    }
+
+    try {
+        showStatus(`로딩 중: ${selectedKey}/${selectedMIDI}`);
+
+        // 루트 피치 클래스 계산 (키 이름에서 추출)
+        const rootPC = KEY_STR_TO_PC[selectedKey] || 0;
+        console.log(`[MIDI] Key: ${selectedKey}, Root PC: ${rootPC}`);
+
+        // playbackNoteMap 초기화
+        playbackNoteMap = {};
+
+        // MIDI 파일 가져오기
+        const response = await fetch(`/api/midi-file/${selectedKey}/${selectedMIDI}`);
+        if (!response.ok) {
+            throw new Error('MIDI 파일 로드 실패');
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        currentMidiData = await Midi.fromUrl(URL.createObjectURL(new Blob([arrayBuffer])));
+
+        showSuccess(`재생 중: ${selectedMIDI}`);
+        isPlaying = true;
+
+        // 모든 트랙의 노트를 시간순으로 정렬
+        const allNotes = [];
+        currentMidiData.tracks.forEach((track, trackIdx) => {
+            track.notes.forEach(note => {
+                allNotes.push({
+                    time: note.time,
+                    duration: note.duration,
+                    midi: note.midi,
+                    velocity: note.velocity,
+                    trackIdx
+                });
+            });
+        });
+
+        allNotes.sort((a, b) => a.time - b.time);
+
+        // 스케줄링
+        const startTime = Date.now();
+        allNotes.forEach(note => {
+            const timeout = setTimeout(() => {
+                if (!isPlaying) return;
+
+                // 현재 행복/특별 점수로 확률 계산
+                const probs = calculateProbabilities(happyScore, specialScore);
+
+                // 노트 변조
+                const alteredNote = maybeAlter(note.midi, rootPC, probs);
+                playbackNoteMap[note.midi] = alteredNote;
+
+                // 노트 온
+                const velocity = Math.floor(note.velocity * 127);
+                sendNoteOn(alteredNote, velocity, 0);
+
+                // 노트 오프 스케줄링
+                const offTimeout = setTimeout(() => {
+                    if (!isPlaying) return;
+                    const noteToStop = playbackNoteMap[note.midi] || note.midi;
+                    sendNoteOff(noteToStop, 0);
+                    delete playbackNoteMap[note.midi];
+                }, note.duration * 1000);
+
+                playbackTimeouts.push(offTimeout);
+            }, note.time * 1000);
+
+            playbackTimeouts.push(timeout);
+        });
+
+        // 재생 종료 처리
+        const totalDuration = allNotes.length > 0 ? allNotes[allNotes.length - 1].time + allNotes[allNotes.length - 1].duration : 0;
+        const endTimeout = setTimeout(() => {
+            stopMIDI();
+            showSuccess('재생 완료');
+        }, totalDuration * 1000 + 500);
+
+        playbackTimeouts.push(endTimeout);
+
+    } catch (error) {
+        showError('MIDI 재생 실패: ' + error.message);
+        console.error('MIDI playback error:', error);
+        isPlaying = false;
+    }
 }
 
 function stopMIDI() {
+    // 모든 타이머 취소
+    playbackTimeouts.forEach(timeout => clearTimeout(timeout));
+    playbackTimeouts = [];
+
+    // 모든 노트 오프
     allNotesOff();
+
+    // 노트 매핑 초기화
+    playbackNoteMap = {};
+
+    isPlaying = false;
     showStatus('MIDI 정지');
 }

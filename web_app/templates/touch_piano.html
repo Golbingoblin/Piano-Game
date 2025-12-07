@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Touch Piano</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            background: #000;
+            touch-action: none;
+        }
+
+        #canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #7e22ce 100%);
+            cursor: none;
+        }
+
+        .ui-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .header {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            color: white;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .header h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+            opacity: 0.9;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.7;
+        }
+
+        .back-button {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid white;
+            color: white;
+            padding: 12px 24px;
+            font-size: 1.1em;
+            cursor: pointer;
+            border-radius: 8px;
+            text-decoration: none;
+            display: inline-block;
+            backdrop-filter: blur(10px);
+            pointer-events: auto;
+            transition: all 0.3s;
+        }
+
+        .back-button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateX(-5px);
+        }
+
+        .info-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            padding: 15px 30px;
+            border-radius: 10px;
+            color: white;
+            text-align: center;
+        }
+
+        .info-panel p {
+            margin: 5px 0;
+            font-size: 1.1em;
+        }
+
+        .midi-status {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            padding: 10px 20px;
+            border-radius: 8px;
+            color: white;
+            font-size: 1em;
+        }
+
+        .midi-status.connected {
+            background: rgba(0, 200, 0, 0.6);
+        }
+
+        .midi-status.disconnected {
+            background: rgba(200, 0, 0, 0.6);
+        }
+
+        .touch-counter {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            padding: 10px 20px;
+            border-radius: 8px;
+            color: white;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+
+        .axis-labels {
+            position: absolute;
+            color: white;
+            font-size: 1em;
+            opacity: 0.7;
+            text-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+        }
+
+        .axis-labels.x-axis {
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .axis-labels.y-axis {
+            top: 50%;
+            right: 100px;
+            transform: translateY(-50%) rotate(-90deg);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+
+    <div class="ui-overlay">
+        <a href="/" class="back-button">← Back</a>
+
+        <div class="header">
+            <h1>🎹 Touch Piano</h1>
+            <p>터치로 음악을 연주하세요</p>
+        </div>
+
+        <div class="midi-status disconnected" id="midiStatus">MIDI: Disconnected</div>
+
+        <div class="touch-counter" id="touchCounter">Touches: 0</div>
+
+        <div class="info-panel">
+            <p><strong>좌우(X축)</strong>: 음의 높낮이 | <strong>상하(Y축)</strong>: 강약(Velocity)</p>
+            <p>멀티터치 지원 - 최대 10개 동시 터치 가능</p>
+            <p id="currentChord" style="font-size: 1.3em; margin-top: 10px; color: #ffd700;">Chord: <strong>...</strong></p>
+            <p style="font-size: 0.9em; margin-top: 5px; opacity: 0.8;">
+                ⌨️ 방향키: ←→ 코드 변경 | ↑↓ 진행 변경 | 자동 진행: 0.8초마다
+            </p>
+        </div>
+
+        <div class="axis-labels x-axis">낮은 음 ← → 높은 음</div>
+        <div class="axis-labels y-axis">약하게 ← → 강하게</div>
+    </div>
+
+    <script src="/static/js/common.js"></script>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Canvas setup
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // MIDI status element
+        const midiStatus = document.getElementById('midiStatus');
+
+        // Chord Progression System
+        let chordTables = {};
+        let progressions = [];
+        let currentProgressionIndex = 0;
+        let currentChordIndex = 0;
+        let currentChordName = '';
+
+        // Load chord CSV file
+        async function loadChordDataCSV() {
+            const result = await loadCSV('/static/data/chord.CSV');
+            if (!result.success) {
+                console.error('chord.CSV 로드 실패');
+                return;
+            }
+
+            result.data.forEach(row => {
+                const chordName = row[0];
+                if (!chordName || chordName === 'nan') return;
+
+                const tags = {};
+                NOTE_NAMES.forEach((noteName, idx) => {
+                    const tag = (row[idx + 1] || '').trim().toUpperCase();
+                    tags[noteName] = tag;
+                });
+
+                chordTables[chordName] = tags;
+            });
+
+            console.log('✅ Chord tables loaded:', Object.keys(chordTables).length);
+        }
+
+        // Load progression CSV file
+        async function loadProgressionDataCSV() {
+            const result = await loadCSV('/static/data/progression.CSV');
+            if (!result.success) {
+                console.error('progression.CSV 로드 실패');
+                return;
+            }
+
+            result.data.forEach((row, i) => {
+                const name = row[0] || `Row${i}`;
+                const seq = row.slice(1, 33).filter(x => x && x !== 'nan');
+                if (seq.length > 0) {
+                    progressions.push({ name, seq });
+                }
+            });
+
+            console.log('✅ Progressions loaded:', progressions.length);
+
+            // Initialize with random progression
+            if (progressions.length > 0) {
+                currentProgressionIndex = Math.floor(Math.random() * progressions.length);
+                currentChordIndex = 0;
+                updateCurrentChord();
+                console.log('🎲 Random progression selected:', progressions[currentProgressionIndex].name);
+            }
+        }
+
+        // Update current chord from progression
+        function updateCurrentChord() {
+            if (progressions.length === 0) return;
+
+            const progression = progressions[currentProgressionIndex];
+            currentChordName = progression.seq[currentChordIndex];
+
+            // Update UI
+            document.getElementById('currentChord').innerHTML =
+                `Chord: <strong>${currentChordName}</strong>`;
+        }
+
+        // Advance to next chord in progression
+        function nextChord() {
+            if (progressions.length === 0) return;
+
+            const progression = progressions[currentProgressionIndex];
+            currentChordIndex = (currentChordIndex + 1) % progression.seq.length;
+            updateCurrentChord();
+        }
+
+        // Get allowed pitch classes for current chord
+        function allowedPCs() {
+            if (!chordTables[currentChordName]) {
+                return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+            }
+
+            const tags = ['1', '2', '3', '4', '5', '6', '7', 'T', 'L'];
+            const forbid = ['A', ''];
+            const pcs = [];
+
+            NOTE_NAMES.forEach((noteName, pc) => {
+                const tag = chordTables[currentChordName][noteName];
+                if (forbid.includes(tag)) return;
+                if (tags.includes(tag)) {
+                    pcs.push(pc);
+                }
+            });
+
+            return pcs.length > 0 ? pcs : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+        }
+
+        // Quantize MIDI note to nearest allowed pitch class
+        function quantizeToChord(midiNote) {
+            const allowed = allowedPCs();
+            const pitchClass = midiNote % 12;
+            const octave = Math.floor(midiNote / 12);
+
+            // Find nearest allowed pitch class
+            let minDist = 12;
+            let bestPC = pitchClass;
+
+            for (const pc of allowed) {
+                const dist = Math.min(
+                    Math.abs(pc - pitchClass),
+                    Math.abs(pc - pitchClass + 12),
+                    Math.abs(pc - pitchClass - 12)
+                );
+                if (dist < minDist) {
+                    minDist = dist;
+                    bestPC = pc;
+                }
+            }
+
+            return octave * 12 + bestPC;
+        }
+
+        // Note mapping
+        const LOWEST_NOTE = 21;  // A0
+        const HIGHEST_NOTE = 108; // C8
+        const NOTE_RANGE = HIGHEST_NOTE - LOWEST_NOTE;
+
+        // Touch state
+        const activeTouches = new Map();
+        const visualEffects = [];
+
+        // Map X position to MIDI note (with chord quantization)
+        function xToNote(x) {
+            const ratio = x / canvas.width;
+            const rawNote = Math.floor(LOWEST_NOTE + ratio * NOTE_RANGE);
+            const clampedNote = Math.max(LOWEST_NOTE, Math.min(HIGHEST_NOTE, rawNote));
+
+            // Quantize to current chord
+            return quantizeToChord(clampedNote);
+        }
+
+        // Map Y position to velocity (inverted: top = soft, bottom = loud)
+        function yToVelocity(y) {
+            const ratio = y / canvas.height;
+            const velocity = Math.floor(ratio * 127);
+            return Math.max(1, Math.min(127, velocity));
+        }
+
+        // Visual effect class
+        class TouchEffect {
+            constructor(x, y, velocity) {
+                this.x = x;
+                this.y = y;
+                this.velocity = velocity;
+                this.radius = 0;
+                this.maxRadius = 50 + (velocity / 127) * 100;
+                this.alpha = 1;
+                this.hue = (x / canvas.width) * 360;
+                this.growing = true;
+            }
+
+            update() {
+                if (this.growing) {
+                    this.radius += 5;
+                    if (this.radius >= this.maxRadius) {
+                        this.growing = false;
+                    }
+                } else {
+                    this.alpha -= 0.02;
+                }
+            }
+
+            draw() {
+                ctx.save();
+
+                // Outer glow
+                const gradient = ctx.createRadialGradient(
+                    this.x, this.y, 0,
+                    this.x, this.y, this.radius
+                );
+
+                const intensity = this.velocity / 127;
+                gradient.addColorStop(0, `hsla(${this.hue}, 100%, 70%, ${this.alpha * intensity})`);
+                gradient.addColorStop(0.5, `hsla(${this.hue}, 100%, 50%, ${this.alpha * intensity * 0.5})`);
+                gradient.addColorStop(1, `hsla(${this.hue}, 100%, 30%, 0)`);
+
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Inner core
+                ctx.fillStyle = `hsla(${this.hue}, 100%, 90%, ${this.alpha * intensity})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius * 0.3, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            }
+
+            isDead() {
+                return this.alpha <= 0;
+            }
+        }
+
+        // Active touch visualization
+        class ActiveTouch {
+            constructor(x, y, velocity, note) {
+                this.x = x;
+                this.y = y;
+                this.velocity = velocity;
+                this.note = note;
+                this.hue = (x / canvas.width) * 360;
+                this.pulsePhase = 0;
+            }
+
+            update(x, y, velocity) {
+                this.x = x;
+                this.y = y;
+                this.velocity = velocity;
+                this.pulsePhase += 0.1;
+            }
+
+            draw() {
+                ctx.save();
+
+                const intensity = this.velocity / 127;
+                const pulseSize = 40 + Math.sin(this.pulsePhase) * 10;
+                const baseSize = 30 + intensity * 40;
+
+                // Pulsing glow
+                const gradient = ctx.createRadialGradient(
+                    this.x, this.y, 0,
+                    this.x, this.y, pulseSize
+                );
+                gradient.addColorStop(0, `hsla(${this.hue}, 100%, 70%, ${0.8 * intensity})`);
+                gradient.addColorStop(1, `hsla(${this.hue}, 100%, 50%, 0)`);
+
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, pulseSize, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Core
+                ctx.fillStyle = `hsla(${this.hue}, 100%, 90%, ${0.9})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, baseSize * 0.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Ring
+                ctx.strokeStyle = `hsla(${this.hue}, 100%, 80%, ${0.6})`;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, baseSize, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.restore();
+            }
+        }
+
+        // Touch event handlers
+        function handleTouchStart(e) {
+            e.preventDefault();
+
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const touch = e.changedTouches[i];
+                const x = touch.clientX;
+                const y = touch.clientY;
+
+                const note = xToNote(x);
+                const velocity = yToVelocity(y);
+
+                // Send MIDI
+                sendNoteOn(note, velocity);
+
+                // Store touch state
+                const touchViz = new ActiveTouch(x, y, velocity, note);
+                activeTouches.set(touch.identifier, touchViz);
+
+                // Add visual effect
+                visualEffects.push(new TouchEffect(x, y, velocity));
+            }
+
+            updateTouchCounter();
+        }
+
+        function handleTouchMove(e) {
+            e.preventDefault();
+
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const touch = e.changedTouches[i];
+                const touchViz = activeTouches.get(touch.identifier);
+
+                if (touchViz) {
+                    const x = touch.clientX;
+                    const y = touch.clientY;
+                    const newNote = xToNote(x);
+                    const newVelocity = yToVelocity(y);
+
+                    // If note changed, send note off for old note and on for new note
+                    if (newNote !== touchViz.note) {
+                        sendNoteOff(touchViz.note);
+                        sendNoteOn(newNote, newVelocity);
+                        touchViz.note = newNote;
+                    }
+
+                    touchViz.update(x, y, newVelocity);
+                }
+            }
+        }
+
+        function handleTouchEnd(e) {
+            e.preventDefault();
+
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const touch = e.changedTouches[i];
+                const touchViz = activeTouches.get(touch.identifier);
+
+                if (touchViz) {
+                    // Send MIDI note off
+                    sendNoteOff(touchViz.note);
+
+                    // Add final burst effect
+                    visualEffects.push(new TouchEffect(touchViz.x, touchViz.y, touchViz.velocity));
+
+                    // Remove from active touches
+                    activeTouches.delete(touch.identifier);
+                }
+            }
+
+            updateTouchCounter();
+        }
+
+        function updateTouchCounter() {
+            document.getElementById('touchCounter').textContent = `Touches: ${activeTouches.size}`;
+        }
+
+        // Event listeners
+        canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+        canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+        canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+        canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+        // Mouse events for testing on non-touch devices
+        let mouseDown = false;
+        let mouseTouch = null;
+
+        canvas.addEventListener('mousedown', (e) => {
+            mouseDown = true;
+            const x = e.clientX;
+            const y = e.clientY;
+            const note = xToNote(x);
+            const velocity = yToVelocity(y);
+
+            sendNoteOn(note, velocity);
+            mouseTouch = new ActiveTouch(x, y, velocity, note);
+            visualEffects.push(new TouchEffect(x, y, velocity));
+
+            activeTouches.set('mouse', mouseTouch);
+            updateTouchCounter();
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (mouseDown && mouseTouch) {
+                const x = e.clientX;
+                const y = e.clientY;
+                const newNote = xToNote(x);
+                const newVelocity = yToVelocity(y);
+
+                if (newNote !== mouseTouch.note) {
+                    sendNoteOff(mouseTouch.note);
+                    sendNoteOn(newNote, newVelocity);
+                    mouseTouch.note = newNote;
+                }
+
+                mouseTouch.update(x, y, newVelocity);
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            if (mouseDown && mouseTouch) {
+                sendNoteOff(mouseTouch.note);
+                visualEffects.push(new TouchEffect(mouseTouch.x, mouseTouch.y, mouseTouch.velocity));
+                activeTouches.delete('mouse');
+                mouseTouch = null;
+                mouseDown = false;
+                updateTouchCounter();
+            }
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            if (mouseDown && mouseTouch) {
+                sendNoteOff(mouseTouch.note);
+                activeTouches.delete('mouse');
+                mouseTouch = null;
+                mouseDown = false;
+                updateTouchCounter();
+            }
+        });
+
+        // Animation loop
+        function animate() {
+            // Clear canvas
+            ctx.fillStyle = 'rgba(30, 60, 114, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Update and draw visual effects
+            for (let i = visualEffects.length - 1; i >= 0; i--) {
+                const effect = visualEffects[i];
+                effect.update();
+                effect.draw();
+
+                if (effect.isDead()) {
+                    visualEffects.splice(i, 1);
+                }
+            }
+
+            // Draw active touches
+            activeTouches.forEach(touch => {
+                touch.draw();
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        // Keyboard controls for chord progression
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                // Next chord
+                e.preventDefault();
+                nextChord();
+            } else if (e.key === 'ArrowLeft') {
+                // Previous chord
+                e.preventDefault();
+                if (progressions.length === 0) return;
+                const progression = progressions[currentProgressionIndex];
+                currentChordIndex = (currentChordIndex - 1 + progression.seq.length) % progression.seq.length;
+                updateCurrentChord();
+            } else if (e.key === 'ArrowUp') {
+                // Next progression
+                e.preventDefault();
+                if (progressions.length === 0) return;
+                currentProgressionIndex = (currentProgressionIndex + 1) % progressions.length;
+                currentChordIndex = 0;
+                updateCurrentChord();
+            } else if (e.key === 'ArrowDown') {
+                // Previous progression
+                e.preventDefault();
+                if (progressions.length === 0) return;
+                currentProgressionIndex = (currentProgressionIndex - 1 + progressions.length) % progressions.length;
+                currentChordIndex = 0;
+                updateCurrentChord();
+            }
+        });
+
+        // Auto-advance chord progression
+        let autoProgressTimer = null;
+        function startAutoProgress() {
+            if (autoProgressTimer) clearInterval(autoProgressTimer);
+            // Change chord every 0.8 seconds
+            autoProgressTimer = setInterval(() => {
+                nextChord();
+            }, 800);
+        }
+
+        // Initialize
+        async function initialize() {
+            // MIDI 초기화
+            const midiResult = await initMIDI();
+            if (midiResult.success) {
+                midiStatus.textContent = `MIDI: ${midiResult.selected.name}`;
+                midiStatus.classList.remove('disconnected');
+                midiStatus.classList.add('connected');
+                console.log('✅ MIDI connected:', midiResult.selected.name);
+            } else {
+                console.error('❌ MIDI 초기화 실패:', midiResult.error);
+            }
+
+            // CSV 로드
+            await loadChordDataCSV();
+            await loadProgressionDataCSV();
+
+            // 애니메이션 시작
+            animate();
+
+            // 자동 코드 진행 시작
+            startAutoProgress();
+        }
+
+        initialize();
+
+        // Prevent context menu on long press
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    </script>
+</body>
+</html>

@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Composer Detail</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Georgia', 'Times New Roman', serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #e8e8e8;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .back-button {
+            background: rgba(212, 175, 55, 0.2);
+            border: 2px solid #d4af37;
+            color: #d4af37;
+            padding: 12px 24px;
+            font-size: 1em;
+            cursor: pointer;
+            border-radius: 5px;
+            font-family: 'Georgia', serif;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            margin-bottom: 30px;
+        }
+
+        .back-button:hover {
+            background: #d4af37;
+            color: #1a1a2e;
+            transform: translateX(-5px);
+        }
+
+        .composer-header {
+            display: flex;
+            gap: 40px;
+            margin-bottom: 50px;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(212, 175, 55, 0.3);
+            border-radius: 15px;
+        }
+
+        .composer-portrait {
+            flex-shrink: 0;
+        }
+
+        .composer-portrait-img {
+            width: 250px;
+            height: 250px;
+            border-radius: 10px;
+            border: 3px solid #d4af37;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+            object-fit: cover;
+        }
+
+        .composer-portrait-placeholder {
+            width: 250px;
+            height: 250px;
+            border-radius: 10px;
+            border: 3px solid #d4af37;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+            background: linear-gradient(135deg, #2a2a3e 0%, #3a3a5e 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 5em;
+            color: #d4af37;
+        }
+
+        .composer-info {
+            flex: 1;
+        }
+
+        .composer-name {
+            font-size: 3em;
+            color: #d4af37;
+            margin-bottom: 20px;
+            font-weight: 400;
+            letter-spacing: 2px;
+        }
+
+        .composer-bio {
+            font-size: 1.1em;
+            line-height: 1.8;
+            color: #c8c8c8;
+            margin-bottom: 20px;
+        }
+
+        .composer-stats {
+            font-size: 1em;
+            color: #b8b8b8;
+            font-style: italic;
+        }
+
+        .pieces-section {
+            margin-top: 40px;
+        }
+
+        .section-title {
+            font-size: 2em;
+            color: #d4af37;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(212, 175, 55, 0.3);
+            font-weight: 400;
+        }
+
+        .pieces-list {
+            display: grid;
+            gap: 15px;
+        }
+
+        .piece-item {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(212, 175, 55, 0.2);
+            border-radius: 8px;
+            padding: 20px 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .piece-item:hover {
+            background: rgba(212, 175, 55, 0.15);
+            border-color: #d4af37;
+            transform: translateX(10px);
+        }
+
+        .piece-info {
+            flex: 1;
+        }
+
+        .piece-title {
+            font-size: 1.3em;
+            color: #e8e8e8;
+            margin-bottom: 8px;
+        }
+
+        .piece-meta {
+            font-size: 0.95em;
+            color: #b8b8b8;
+        }
+
+        .piece-duration {
+            font-size: 1.1em;
+            color: #d4af37;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .like-button {
+            background: none;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            padding: 5px 10px;
+            transition: transform 0.2s ease;
+            margin-left: 15px;
+        }
+
+        .like-button:hover {
+            transform: scale(1.2);
+        }
+
+        .like-button.liked {
+            filter: drop-shadow(0 0 8px #d4af37);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px;
+            font-size: 1.5em;
+            color: #d4af37;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(212, 175, 55, 0.3);
+            border-top-color: #d4af37;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/classical-library" class="back-button">← Back to Library</a>
+
+        <div id="content">
+            <div class="loading">
+                <div class="loading-spinner"></div>
+                <p>Loading composer information...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const composerName = "{{ composer_name }}";
+
+        async function loadComposerData() {
+            try {
+                const composersRes = await fetch('/api/composers');
+                const composers = await composersRes.json();
+                const composerData = composers[composerName];
+
+                if (!composerData) {
+                    throw new Error('Composer not found');
+                }
+
+                // Try to load composer info (Wikipedia)
+                let composerInfo = null;
+                try {
+                    const infoRes = await fetch(`/static/data/composer_info.json`);
+                    const allInfo = await infoRes.json();
+                    composerInfo = allInfo[composerName];
+                } catch (e) {
+                    console.log('Composer info not available yet');
+                }
+
+                displayComposer(composerData, composerInfo);
+            } catch (error) {
+                console.error('Error loading composer:', error);
+                document.getElementById('content').innerHTML = `
+                    <div class="error">
+                        <p>Error loading composer information.</p>
+                    </div>
+                `;
+            }
+        }
+
+        function displayComposer(data, info) {
+            const imageUrl = info?.image_url || '';
+            const extract = info?.extract || 'Information about this composer is being loaded...';
+            const initial = composerName.split(' ').map(n => n[0]).join('').substring(0, 2);
+
+            const html = `
+                <div class="composer-header">
+                    <div class="composer-portrait">
+                        ${imageUrl
+                            ? `<img src="${imageUrl}" alt="${composerName}" class="composer-portrait-img">`
+                            : `<div class="composer-portrait-placeholder">${initial}</div>`
+                        }
+                    </div>
+                    <div class="composer-info">
+                        <h1 class="composer-name">${composerName}</h1>
+                        <p class="composer-bio">${extract}</p>
+                        <p class="composer-stats">${data.piece_count} pieces in collection</p>
+                    </div>
+                </div>
+
+                <div class="pieces-section">
+                    <h2 class="section-title">Musical Works</h2>
+                    <div class="pieces-list">
+                        ${data.pieces.map((piece, index) => `
+                            <div class="piece-item" onclick="playPiece('${encodeURIComponent(piece.midi_file)}', ${index})">
+                                <div class="piece-info">
+                                    <div class="piece-title">${piece.title}</div>
+                                    <div class="piece-meta">Year: ${piece.year} | ${formatDuration(piece.duration)}</div>
+                                </div>
+                                <div style="display: flex; align-items: center;">
+                                    <div class="piece-duration">${formatDuration(piece.duration)}</div>
+                                    <button class="like-button" id="like-${index}" onclick="event.stopPropagation(); toggleLike('${composerName}', '${piece.title}', ${index})">
+                                        ${isLiked(composerName, piece.title) ? '♥' : '♡'}
+                                    </button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('content').innerHTML = html;
+            updateLikeButtons();
+        }
+
+        function formatDuration(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function playPiece(midiPath, index) {
+            window.location.href = `/piece/${midiPath}`;
+        }
+
+        // Like functionality with localStorage
+        function getLikes() {
+            const likes = localStorage.getItem('classical_likes');
+            return likes ? JSON.parse(likes) : {};
+        }
+
+        function setLikes(likes) {
+            localStorage.setItem('classical_likes', JSON.stringify(likes));
+        }
+
+        function isLiked(composer, title) {
+            const likes = getLikes();
+            const key = `${composer}::${title}`;
+            return likes[key] || false;
+        }
+
+        function toggleLike(composer, title, index) {
+            const likes = getLikes();
+            const key = `${composer}::${title}`;
+            likes[key] = !likes[key];
+            setLikes(likes);
+
+            const button = document.getElementById(`like-${index}`);
+            button.textContent = likes[key] ? '♥' : '♡';
+            button.classList.toggle('liked', likes[key]);
+        }
+
+        function updateLikeButtons() {
+            document.querySelectorAll('.like-button').forEach((btn, index) => {
+                const isLikedState = btn.textContent === '♥';
+                btn.classList.toggle('liked', isLikedState);
+            });
+        }
+
+        loadComposerData();
+    </script>
+</body>
+</html>

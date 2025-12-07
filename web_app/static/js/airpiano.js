@@ -22,7 +22,7 @@ const FINGER_RELEASE_DEG = 175;
 const FINGER_COUNT = 5;
 
 // 음악 이론
-const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+// NOTE_NAMES는 common.js에서 로드됨
 const NAME2PC = {
     'C':0,'B#':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'Fb':4,
     'F':5,'E#':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11,'Cb':11
@@ -270,9 +270,10 @@ async function startAirPiano() {
     hands.onResults(onHandsResults);
 
     // 카메라 시작
-    camera = new Camera(document.createElement('video'), {
+    const videoElement = document.createElement('video');
+    camera = new Camera(videoElement, {
         onFrame: async () => {
-            await hands.send({ image: camera.g });
+            await hands.send({ image: videoElement });
         },
         width: 1280,
         height: 720
